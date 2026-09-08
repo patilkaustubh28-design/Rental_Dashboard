@@ -221,7 +221,7 @@ const FALLBACK = {
 function fh(arr){ return arr.map(s => ({ status: s, date: "" })); }
 /* ========================================================= */
 
-const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug"];
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const STATUS_ORDER = { overdue:0, pending:1, upcoming:2, paid:3 };
 const STATUS_LABEL = { overdue:"Overdue", pending:"Pending", upcoming:"Not due yet", paid:"Paid" };
@@ -328,14 +328,62 @@ function normalizeMonthLabel(raw){
 // (Tick, Date pairs starting at column 1), so the sheet can keep growing month
 // over month without any code changes here.
 function parseMonthlyLogCSV(rows){
-  const hdrIdx = rows.findIndex(r => (r[0]||"").trim().toUpperCase() === "TENANT NAME");
+  const hdrIdx = rows.findIndex(
+    r => (r[0] || "").trim().toUpperCase() === "TENANT NAME"
+  );
+
   const headerRow = rows[hdrIdx] || [];
   const months = [];
+
   for (let c = 1; c < headerRow.length; c += 2){
-    const label = (headerRow[c] || "").trim();
-    if (!label) break;
-    months.push({ label: normalizeMonthLabel(label), colIndex: c });
+    const rawLabel = (headerRow[c] || "").trim();
+    if (!rawLabel) break;
+
+    const match = rawLabel.match(
+      /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[-\s]?(\d{2,4})/i
+    );
+
+    if (!match) continue;
+
+    const monthName =
+      match[1].charAt(0).toUpperCase() +
+      match[1].slice(1).toLowerCase();
+
+    let year = parseInt(match[2], 10);
+
+    if (year < 100) {
+      year += 2000;
+    }
+
+    const monthIndex = MONTH_NAMES.findIndex(
+      m => m.toLowerCase() === monthName.toLowerCase()
+    );
+
+    months.push({
+      label: `${monthName}-${String(year).slice(-2)}`,
+      year,
+      monthIndex,
+      colIndex: c
+    });
   }
+
+  const map = {};
+
+  for (let i = hdrIdx + 2; i < rows.length; i++){
+    const r = rows[i];
+
+    if (!r[0] || !r[0].trim()) continue;
+
+    const tenantName = r[0].trim();
+
+    map[tenantName] = months.map(m => ({
+      tick: String(r[m.colIndex] || "").trim().toUpperCase() === "TRUE",
+      date: String(r[m.colIndex + 1] || "").trim()
+    }));
+  }
+
+  return { map, months };
+}
   const map = {};
   for (let i = hdrIdx + 2; i < rows.length; i++){ // +2 skips the Tick/Date sub-header row
     const r = rows[i];
@@ -356,11 +404,32 @@ function shortDate(raw){
 
 // Finds which column in `months` corresponds to the real current calendar month.
 function currentMonthIndex(months, today){
-  const cur = MONTH_NAMES[today.getMonth()];
-  for (let i = months.length - 1; i >= 0; i--){
-    if (months[i].label === cur) return i;
+  const targetMonth = today.getMonth();
+  const targetYear = today.getFullYear();
+
+  let bestIndex = -1;
+
+  for (let i = 0; i < months.length; i++){
+    const m = months[i];
+
+    // Prefer an exact year + month match.
+    if (
+      m.year === targetYear &&
+      m.monthIndex === targetMonth
+    ) {
+      return i;
+    }
+
+    // Keep the latest month that is not in the future.
+    if (
+      m.year < targetYear ||
+      (m.year === targetYear && m.monthIndex <= targetMonth)
+    ) {
+      bestIndex = i;
+    }
   }
-  return months.length - 1; // fallback: most recent column available
+
+  return bestIndex >= 0 ? bestIndex : 0;
 }
 
 function isSpecialSameMonthPaid(tenantName, today){
@@ -514,8 +583,14 @@ function renderTenantCard(t, i, months, curIdx, today){
           : "paid";
       symbol = m.label;
     }
-    else if (h.status === "paid") { symbol = "✓"; belowLabel = shortDate(h.date) || m.label; }
-    else if (h.status === "unpaid") symbol = "✕";
+    else if (h.status === "paid") {
+  symbol = m.label.split("-")[0];
+  belowLabel = shortDate(h.date);
+}
+else if (h.status === "unpaid") {
+  symbol = m.label.split("-")[0];
+  belowLabel = "";
+}
     const highlight = mi === curIdx ? " current-month" : "";
     return `
       <div class="history-col">
@@ -625,8 +700,6 @@ function markPaidFlow(i){
 
   // Optimistic update — flips immediately, no network call yet
   t.status = "paid";
-  const isArrears = (t.dueIn || "").trim().toLowerCase() === "next month";
-if (isArrears && lastRenderData.curIdx > 0) t.history[lastRenderData.curIdx - 1] = { status: "paid", date: "" };
   updateTenantCard(i);
 
   let secondsLeft = UNDO_WINDOW_MS / 1000;
@@ -653,8 +726,7 @@ function undoMarkPaid(i){
   delete pendingWrites[i];
 
   const t = lastSorted[i];
-  if (t) { t.status = pending.originalStatus; const isArrears2 = (t.dueIn || "").trim().toLowerCase() === "next month";
-if (isArrears2 && lastRenderData.curIdx > 0) t.history[lastRenderData.curIdx - 1] = { status: "unpaid", date: "" }; updateTenantCard(i); }
+  if (t) { t.status = pending.originalStatus; updateTenantCard(i); }
   hideUndoToast();
 }
 
@@ -682,8 +754,7 @@ async function doWrite(i, tenantName, monthLabel, originalStatus){
     delete pendingWrites[i];
     savingSet.delete(i);
     const t = lastSorted[i];
-    if (t) { t.status = originalStatus; const isArrears3 = (t.dueIn || "").trim().toLowerCase() === "next month";
-if (isArrears3 && lastRenderData.curIdx > 0) t.history[lastRenderData.curIdx - 1] = { status: "unpaid", date: "" }; updateTenantCard(i); }
+    if (t) { t.status = originalStatus; updateTenantCard(i); }
     showErrorBanner(`Couldn't save ${tenantName}'s payment — check your connection and try again.`);
   }
 }

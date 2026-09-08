@@ -384,18 +384,7 @@ function parseMonthlyLogCSV(rows){
 
   return { map, months };
 }
-  const map = {};
-  for (let i = hdrIdx + 2; i < rows.length; i++){ // +2 skips the Tick/Date sub-header row
-    const r = rows[i];
-    if (!r[0] || !r[0].trim()) continue;
-    map[r[0].trim()] = months.map(m => ({
-      tick: (r[m.colIndex] || "").trim().toUpperCase() === "TRUE",
-      date: (r[m.colIndex + 1] || "").trim()
-    }));
-  }
-  return { map, months };
-}
-
+  
 function shortDate(raw){
   const d = parseDateFlexible(raw);
   if (!d) return "";

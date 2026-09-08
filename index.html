@@ -625,6 +625,8 @@ function markPaidFlow(i){
 
   // Optimistic update — flips immediately, no network call yet
   t.status = "paid";
+  const isArrears = (t.dueIn || "").trim().toLowerCase() === "next month";
+if (isArrears && lastRenderData.curIdx > 0) t.history[lastRenderData.curIdx - 1] = { status: "paid", date: "" };
   updateTenantCard(i);
 
   let secondsLeft = UNDO_WINDOW_MS / 1000;
@@ -651,7 +653,8 @@ function undoMarkPaid(i){
   delete pendingWrites[i];
 
   const t = lastSorted[i];
-  if (t) { t.status = pending.originalStatus; updateTenantCard(i); }
+  if (t) { t.status = pending.originalStatus; const isArrears2 = (t.dueIn || "").trim().toLowerCase() === "next month";
+if (isArrears2 && lastRenderData.curIdx > 0) t.history[lastRenderData.curIdx - 1] = { status: "unpaid", date: "" }; updateTenantCard(i); }
   hideUndoToast();
 }
 
@@ -679,7 +682,8 @@ async function doWrite(i, tenantName, monthLabel, originalStatus){
     delete pendingWrites[i];
     savingSet.delete(i);
     const t = lastSorted[i];
-    if (t) { t.status = originalStatus; updateTenantCard(i); }
+    if (t) { t.status = originalStatus; const isArrears3 = (t.dueIn || "").trim().toLowerCase() === "next month";
+if (isArrears3 && lastRenderData.curIdx > 0) t.history[lastRenderData.curIdx - 1] = { status: "unpaid", date: "" }; updateTenantCard(i); }
     showErrorBanner(`Couldn't save ${tenantName}'s payment — check your connection and try again.`);
   }
 }

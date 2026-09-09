@@ -431,6 +431,8 @@ function buildHistory(rawTicks, agrStartStr, tenantName, months, curIdx, today){
   const agrStart = parseDateFlexible(agrStartStr);
   return months.map((m, idx) => {
     if (idx === curIdx){
+      const cell = rawTicks && rawTicks[idx];
+      if (cell && cell.tick) return { status: "paid", date: cell.date };
       if (isSpecialSameMonthPaid(tenantName, today)) return { status: "paid", date: "" };
       return { status: "current", date: "" };
     }
@@ -564,21 +566,15 @@ function renderTenantCard(t, i, months, curIdx, today){
 
   const historyHtml = months.map((m, mi) => {
     const h = t.history[mi] || { status: "na", date: "" };
-    let cls = h.status, symbol = "", belowLabel = m.label;
+    let cls = h.status, symbol = m.label.split("-")[0], belowLabel = "";
     if (h.status === "current") {
       cls = t.status === "overdue" ? "unpaid"
           : t.status === "pending" ? "pending"
           : t.status === "upcoming" ? "upcoming"
           : "paid";
-      symbol = m.label;
     }
     else if (h.status === "paid") {
-  symbol = m.label.split("-")[0];
   belowLabel = shortDate(h.date);
-}
-else if (h.status === "unpaid") {
-  symbol = m.label.split("-")[0];
-  belowLabel = "";
 }
     const highlight = mi === curIdx ? " current-month" : "";
     return `

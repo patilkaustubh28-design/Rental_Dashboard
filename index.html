@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rental Ledger — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Yeseva+One&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cover:#3B1220; --cover-deep:#2A0D17; --gold:#B08D3E; --gold-soft:#D9BE7C;
+    --paper:#F6EFDF; --paper-line:#E3D6B8; --ink:#241C1A; --ink-soft:#5C4F45;
+    --stamp-green:#2F6E44; --stamp-red:#A5322A; --stamp-amber:#B4791F; --stamp-grey:#8A7E6D;
+    font-family:'IBM Plex Sans', -apple-system, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--cover-deep); color:var(--ink); -webkit-font-smoothing:antialiased; }
+  .shell{ max-width:520px; margin:0 auto; min-height:100vh; background:var(--cover); padding-bottom:48px; }
+
+  header{ padding:28px 20px 24px; position:relative; }
+  header::after{ content:""; position:absolute; left:20px; right:20px; bottom:0; height:2px;
+    background:linear-gradient(90deg, transparent, var(--gold) 15%, var(--gold) 85%, transparent); }
+  .eyebrow{ font-family:'Space Mono', monospace; font-size:11px; letter-spacing:0.18em; color:var(--gold-soft);
+    text-transform:uppercase; margin:0 0 6px; }
+  h1{ font-family:'Yeseva One', serif; font-weight:400; font-size:30px; color:var(--paper); margin:0 0 4px; letter-spacing:0.01em; }
+  .date-line{ color:var(--gold-soft); font-size:13px; margin:0; opacity:0.85; }
+  .header-actions{ margin-top:16px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .sync-stamp{ display:inline-flex; align-items:center; gap:8px; border:1.5px dashed var(--gold); border-radius:6px;
+    padding:7px 12px; font-family:'Space Mono', monospace; font-size:11px; color:var(--gold-soft); letter-spacing:0.04em; }
+  .sync-dot{ width:6px; height:6px; border-radius:50%; background:var(--gold); flex-shrink:0; }
+  .sync-dot.live{ background:#6FCF6F; }
+  .sync-dot.cached{ background:var(--stamp-amber); }
+  .refresh-btn{ font-family:'Space Mono', monospace; font-size:11px; letter-spacing:0.04em; color:var(--gold-soft);
+    background:transparent; border:1.5px dashed var(--gold); border-radius:6px; padding:7px 12px; cursor:pointer;
+    -webkit-tap-highlight-color:transparent; }
+  .refresh-btn:disabled{ opacity:0.5; cursor:default; }
+  .refresh-btn:active:not(:disabled){ opacity:0.8; }
+  .sheet-link{ display:inline-flex; align-items:center; gap:6px; background:var(--gold); color:var(--cover-deep);
+    text-decoration:none; border-radius:6px; padding:8px 12px; font-family:'Space Mono', monospace; font-size:11px;
+    font-weight:700; letter-spacing:0.03em; }
+  .sheet-link:active{ opacity:0.85; }
+
+  section{ padding:22px 20px 4px; }
+  .section-title{ font-family:'Space Mono', monospace; font-size:11px; letter-spacing:0.16em; text-transform:uppercase;
+    color:var(--gold-soft); margin:0 0 12px; display:flex; align-items:center; gap:10px; }
+  .section-title::after{ content:""; flex:1; height:1px; background:rgba(176,141,62,0.35); }
+  .section-hint{ font-family:'Space Mono', monospace; font-size:10px; color:rgba(217,190,124,0.6); margin:-6px 0 12px; letter-spacing:0.02em; }
+
+  .stat-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .stat-card{ background:var(--paper); border-radius:3px; padding:16px 14px; position:relative;
+    box-shadow:0 3px 0 rgba(0,0,0,0.18);
+    background-image:repeating-linear-gradient(to bottom, transparent, transparent 21px, var(--paper-line) 22px); }
+  .stat-card .label{ font-family:'Space Mono', monospace; font-size:10px; letter-spacing:0.06em; text-transform:uppercase;
+    color:var(--ink-soft); margin:0 0 6px; }
+  .stat-card .value{ font-family:'Yeseva One', serif; font-size:22px; color:var(--ink); margin:0; line-height:1.1; }
+  .stat-card.accent-green .value{ color:var(--stamp-green); }
+  .stat-card.accent-amber .value{ color:var(--stamp-amber); }
+
+  .tenant-wrap{ background:var(--paper); border-radius:3px; margin-bottom:10px; box-shadow:0 3px 0 rgba(0,0,0,0.18);
+    border-left:4px solid var(--stamp-grey); overflow:hidden; transition:background 0.2s ease; }
+  .tenant-wrap.status-overdue{ border-left-color:var(--stamp-red); }
+  .tenant-wrap.status-pending{ border-left-color:var(--stamp-amber); }
+  .tenant-wrap.status-upcoming{ border-left-color:var(--stamp-grey); }
+  .tenant-wrap.status-paid{ border-left-color:var(--stamp-green); }
+  .tenant-wrap.expiry-warn{ background:#F3E3C4; }
+  .tenant-wrap.expiry-urgent{ background:#F0D2C8; }
+
+  .tenant-card{ padding:14px 14px 14px 16px; display:flex; justify-content:space-between; align-items:center;
+    gap:10px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  .tenant-left{ min-width:0; display:flex; align-items:flex-start; gap:8px; }
+  .chevron{ color:var(--ink-soft); font-size:11px; margin-top:4px; transition:transform 0.2s ease; flex-shrink:0; }
+  .tenant-wrap.open .chevron{ transform:rotate(90deg); }
+  .tenant-name{ font-family:'Yeseva One', serif; font-size:16.5px; margin:0 0 3px; color:var(--ink); }
+  .tenant-meta{ font-size:12px; color:var(--ink-soft); margin:0; }
+  .tenant-meta .dot{ margin:0 5px; opacity:0.5; }
+  .expiry-flag{ display:inline-flex; align-items:center; gap:4px; margin-top:4px; font-family:'Space Mono', monospace;
+    font-size:10px; font-weight:700; letter-spacing:0.03em; }
+  .expiry-flag.warn{ color:var(--stamp-amber); }
+  .expiry-flag.urgent{ color:var(--stamp-red); }
+  .tenant-right{ text-align:right; flex-shrink:0; }
+  .tenant-rent{ font-family:'Space Mono', monospace; font-weight:700; font-size:14.5px; color:var(--ink); margin:0 0 6px; }
+
+  .stamp{ display:inline-block; font-family:'Space Mono', monospace; font-size:9.5px; font-weight:700;
+    letter-spacing:0.09em; text-transform:uppercase; padding:3px 8px; border-radius:3px;
+    border:1.5px solid currentColor; transform:rotate(-3deg); }
+  .stamp-paid{ color:var(--stamp-green); }
+  .stamp-overdue{ color:var(--stamp-red); }
+  .stamp-pending{ color:var(--stamp-amber); }
+  .stamp-upcoming{ color:var(--stamp-grey); }
+  .stamp[onclick]{ cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  .stamp[onclick]:active{ opacity:0.7; transform:rotate(-3deg) scale(0.96); }
+  .stamp-saving{ color:var(--ink-soft); opacity:0.75; cursor:default; }
+  .whatsapp-btn{ margin-top:6px; font-family:'Space Mono', monospace; font-size:10px; font-weight:700;
+    color:#fff; background:#2E7D32; border:none; border-radius:5px; padding:5px 9px; cursor:pointer;
+    -webkit-tap-highlight-color:transparent; display:block; }
+  .whatsapp-btn:active{ opacity:0.8; }
+
+  .undo-toast{ position:fixed; left:16px; right:16px; bottom:-80px; z-index:50;
+    max-width:488px; margin:0 auto; background:var(--cover-deep); color:var(--paper);
+    border:1.5px solid var(--gold); border-radius:8px; padding:12px 14px;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    box-shadow:0 6px 18px rgba(0,0,0,0.35); font-size:13px;
+    transition:bottom 0.25s ease; }
+  .undo-toast.show{ bottom:16px; }
+  .undo-toast .undo-btn{ font-family:'Space Mono', monospace; font-size:11px; font-weight:700;
+    letter-spacing:0.04em; color:var(--cover-deep); background:var(--gold); border:none;
+    border-radius:5px; padding:7px 12px; cursor:pointer; -webkit-tap-highlight-color:transparent;
+    flex-shrink:0; }
+  .undo-toast .undo-btn:active{ opacity:0.85; }
+
+  .error-banner{ position:fixed; left:16px; right:16px; top:16px; z-index:60;
+    max-width:488px; margin:0 auto; background:#5A2420; color:#F6EFDF;
+    border:1.5px solid var(--stamp-red); border-radius:8px; padding:12px 14px;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    box-shadow:0 6px 18px rgba(0,0,0,0.35); font-size:12.5px; line-height:1.4; }
+  .error-banner .dismiss-btn{ background:transparent; border:none; color:#F6EFDF; font-size:16px;
+    cursor:pointer; flex-shrink:0; padding:0 2px; -webkit-tap-highlight-color:transparent; }
+
+  .tenant-detail{ max-height:0; overflow:hidden; transition:max-height 0.25s ease; background:rgba(36,28,26,0.03); }
+  .tenant-wrap.open .tenant-detail{ max-height:420px; }
+  .tenant-detail-inner{ padding:4px 16px 16px 38px; }
+  .detail-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; margin-bottom:14px; }
+  .detail-item .dlabel{ font-family:'Space Mono', monospace; font-size:9.5px; text-transform:uppercase;
+    letter-spacing:0.06em; color:var(--ink-soft); margin:0 0 2px; }
+  .detail-item .dvalue{ font-size:13px; font-weight:600; color:var(--ink); margin:0; }
+
+  .history-label{ font-family:'Space Mono', monospace; font-size:9.5px; text-transform:uppercase;
+    letter-spacing:0.06em; color:var(--ink-soft); margin:0 0 6px; }
+  .history-scroll{ overflow-x:auto; -webkit-overflow-scrolling:touch; margin:0 -4px; padding:2px 4px 4px; }
+  .history-track{ display:inline-flex; gap:5px; }
+  .history-col{ display:flex; flex-direction:column; align-items:center; width:32px; flex-shrink:0; }
+  .hcell{ width:32px; height:32px; border-radius:3px; display:flex; align-items:center; justify-content:center;
+    font-family:'Space Mono', monospace; font-size:8px; font-weight:700; color:#fff; }
+  .hcell-label{ font-family:'Space Mono', monospace; font-size:8px; text-align:center; color:var(--ink-soft); margin-top:3px; }
+  .hcell.paid{ background:var(--stamp-green); }
+  .hcell.unpaid{ background:var(--stamp-red); }
+  .hcell.pending{ background:var(--stamp-amber); color:var(--cover-deep); }
+  .hcell.upcoming{ background:transparent; border:1.5px dashed var(--stamp-grey); }
+  .hcell.na{ background:var(--paper-line); }
+  .hcell.current-month{ outline:2px solid var(--gold); outline-offset:2px; }
+
+  footer{ padding:26px 20px 8px; text-align:center; }
+  footer p{ font-family:'Space Mono', monospace; font-size:10.5px; color:rgba(217,190,124,0.55); letter-spacing:0.03em; margin:0; }
+
+  @media (min-width:600px){ .stat-grid{ grid-template-columns:repeat(4,1fr); } }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header>
+    <p class="eyebrow">Rental Property Ledger</p>
+    <h1>This Month's Book</h1>
+    <p class="date-line" id="todayLine"></p>
+    <div class="header-actions">
+      <div class="sync-stamp"><span class="sync-dot" id="syncDot"></span><span id="syncLine">Loading…</span></div>
+      <button class="refresh-btn" id="refreshBtn" onclick="manualRefresh()">↻ Refresh</button>
+      <a class="sheet-link" id="sheetLink" href="#" target="_blank" rel="noopener">↗ Open Sheet</a>
+    </div>
+  </header>
+
+  <section>
+    <p class="section-title">Ledger Summary</p>
+    <div class="stat-grid" id="statGrid"></div>
+  </section>
+
+  <section>
+    <p class="section-title">Tenant Status — This Month</p>
+    <p class="section-hint">Tap a tenant for deposit, expiry &amp; payment history · card tints as expiry nears</p>
+    <div id="tenantList"></div>
+  </section>
+
+  <footer>
+    <p>Rental Ledger · tap a stamp to mark paid · syncs live with your Google Sheet</p>
+  </footer>
+
+</div>
+
+<script>
+/* =========================================================
+   LIVE DATA SOURCES — published CSV links from Google Sheets.
+   Re-publish (File → Share → Publish to web) if these ever break.
+   ========================================================= */
+const CSV = {
+  dashboard: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQRCEQcYNSKi4yC3QI3nO8Dxn44AuN-_xMpuX9ovbm3NiKhyUD0JcO5gEiXKdb7VY56L3WKGA0LvnID/pub?gid=1805707520&single=true&output=csv",
+  tenants:   "https://docs.google.com/spreadsheets/d/e/2PACX-1vQRCEQcYNSKi4yC3QI3nO8Dxn44AuN-_xMpuX9ovbm3NiKhyUD0JcO5gEiXKdb7VY56L3WKGA0LvnID/pub?gid=782940074&single=true&output=csv",
+  monthlyLog:"https://docs.google.com/spreadsheets/d/e/2PACX-1vQRCEQcYNSKi4yC3QI3nO8Dxn44AuN-_xMpuX9ovbm3NiKhyUD0JcO5gEiXKdb7VY56L3WKGA0LvnID/pub?gid=969016529&single=true&output=csv"
+  /* Deposits CSV intentionally not fetched — vacated-tenant register removed from this dashboard. */
+};
+
+// Apps Script Web App URL for the markPaid write-back endpoint.
+// TODO: paste your deployed /exec URL here before this tick feature will work.
+const WRITE_URL = "https://script.google.com/macros/s/AKfycbydK4smWVvV0mzedxYixn9lf7y-JQZ2kFva_jZw-r8pQcg8Jchm59CFkECmKV5otQI68A/exec";
+
+// Tenants whose current-month (Aug 2026) rent is collected within the first 10 days
+// of the SAME month, so it must show as Paid even before the Sheet's own status logic
+// would normally reflect it. See project handoff for the business rule.
+const SPECIAL_SAME_MONTH_PAID = {
+  year: 2026, monthIndex: 7 /* August, 0-based */,
+  tenants: ["Rajashri Sawant", "Pune", "Manisha Pawar"]
+};
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/1DyzUSj28RTV7sYCOzcIs-gjhIEOjfhmOumsba2kqkGI/edit";
+
+// FALLBACK — last known good snapshot, used only if a live fetch fails
+const FALLBACK = {
+  syncDate: "20 August 2026",
+  summary: { expected:102200, received:52200, pending:50000, outstanding:0, depositsHeld:277000 },
+  tenants: [
+    { name:"Deepak Sapate", location:"DMS Complex", rent:50000, dueDay:5, dueIn:"Next Month", status:"upcoming", outstanding:0, deposit:150000, expiry:"2031-07-31", expiryLabel:"31-Jul-2031", history:fh(["na","na","na","na","na","na","na","current"]) },
+    { name:"Dr Swarupa Shinde", location:"Upper Floor", rent:6500, dueDay:5, dueIn:"Next Month", status:"paid", outstanding:0, deposit:20000, expiry:"2031-06-01", expiryLabel:"01-Jun-2031", history:fh(["paid","paid","paid","paid","paid","paid","paid","current"]) },
+    { name:"Super 30", location:"Ground Floor", rent:12000, dueDay:15, dueIn:"Next Month", status:"paid", outstanding:0, deposit:20000, expiry:"2028-03-01", expiryLabel:"01-Mar-2028", history:fh(["na","paid","paid","paid","paid","paid","paid","current"]) },
+    { name:"Rohit Dharmadhikari", location:"Pushkaraj - Front", rent:5500, dueDay:15, dueIn:"Next Month", status:"paid", outstanding:0, deposit:15000, expiry:"2028-12-31", expiryLabel:"31-Dec-2028", history:fh(["na","na","na","na","na","na","paid","current"]) },
+    { name:"Manisha Pawar", location:"Pushkaraj - Back", rent:2700, dueDay:5, dueIn:"Same Month", status:"paid", outstanding:0, deposit:0, expiry:"2029-12-31", expiryLabel:"31-Dec-2029", history:fh(["paid","paid","paid","paid","paid","paid","paid","paid"]) },
+    { name:"Rajashri Sawant", location:"Vidyanagar G1", rent:4000, dueDay:10, dueIn:"Same Month", status:"paid", outstanding:0, deposit:7000, expiry:"2029-12-31", expiryLabel:"31-Dec-2029", history:fh(["paid","paid","paid","paid","paid","paid","paid","paid"]) },
+    { name:"Nilesh Sawant", location:"Vidyanagar G2", rent:4500, dueDay:10, dueIn:"Next Month", status:"paid", outstanding:0, deposit:15000, expiry:"2028-12-31", expiryLabel:"31-Dec-2028", history:fh(["na","na","na","na","paid","paid","paid","current"]) },
+    { name:"Pune", location:"Pune", rent:17000, dueDay:10, dueIn:"Same Month", status:"paid", outstanding:0, deposit:50000, expiry:"2027-06-30", expiryLabel:"30-Jun-2027", history:fh(["na","na","na","na","na","na","na","paid"]) }
+  ]
+};
+// Helper so the fallback block above can stay readable as plain status strings,
+// while matching the {status, date} shape that live data (buildHistory) produces.
+function fh(arr){ return arr.map(s => ({ status: s, date: "" })); }
+/* ========================================================= */
+
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const STATUS_ORDER = { overdue:0, pending:1, upcoming:2, paid:3 };
+const STATUS_LABEL = { overdue:"Overdue", pending:"Pending", upcoming:"Not due yet", paid:"Paid" };
+
+// ── Tick / write-back state ──────────────────────────────────────────────
+let lastRenderData = null;   // most recent { months, curIdx, today, ... } from render()
+let lastSorted = [];         // most recent sorted tenant array, indexed same as card ids (tw-i)
+const pendingWrites = {};    // i -> { timerId, intervalId, originalStatus, tenantName, monthLabel }
+const savingSet = new Set(); // indices currently mid-write (Saving… state, tap disabled)
+const UNDO_WINDOW_MS = 5000;
+
+function inr(n){ return "₹" + n.toLocaleString("en-IN"); }
+function ordinal(n){
+  if (n % 10 === 1 && n !== 11) return "st";
+  if (n % 10 === 2 && n !== 12) return "nd";
+  if (n % 10 === 3 && n !== 13) return "rd";
+  return "th";
+}
+function parseNum(s){ return parseInt(String(s||"0").replace(/[^\d-]/g,""),10) || 0; }
+function daysUntil(dateStr, today){
+  // Compare calendar dates only (YYYY-MM-DD), not timestamps — avoids the
+  // count shifting by a day depending on time-of-day or timezone.
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const target = Date.UTC(y, m - 1, d);
+  const now = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.round((target - now) / 86400000);
+}
+function statusFromRaw(s){
+  const v = (s||"").trim().toUpperCase();
+  if (v === "PAID") return "paid";
+  if (v === "PENDING") return "pending";
+  if (v === "OVERDUE") return "overdue";
+  return "upcoming";
+}
+function parseDateFlexible(s){
+  // handles "31-Jul-2031" or "01-Aug-2026" style dates
+  if (!s) return null;
+  const d = new Date(s.replace(/-/g, " "));
+  return isNaN(d) ? null : d;
+}
+
+// --- CSV parser (handles quoted fields with embedded commas/newlines) ---
+function parseCSV(text){
+  const rows = [];
+  let row = [], field = "", inQuotes = false;
+  for (let i = 0; i < text.length; i++){
+    const c = text[i];
+    if (inQuotes){
+      if (c === '"'){
+        if (text[i+1] === '"'){ field += '"'; i++; } else { inQuotes = false; }
+      } else field += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ",") { row.push(field); field = ""; }
+      else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; }
+      else if (c === "\r") { /* skip */ }
+      else field += c;
+    }
+  }
+  if (field.length || row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+
+function parseDashboardCSV(rows){
+  const hdrIdx = rows.findIndex(r => (r[0]||"").includes("Total Rent"));
+  const valRow = rows[hdrIdx + 1] || [];
+  const summary = {
+    expected: parseNum(valRow[0]), received: parseNum(valRow[1]), pending: parseNum(valRow[2]),
+    outstanding: parseNum(valRow[3]), depositsHeld: parseNum(valRow[4])
+  };
+  const tHdrIdx = rows.findIndex(r => (r[0]||"").trim() === "#" && (r[1]||"").trim() === "Tenant Name");
+  const tenants = [];
+  for (let i = tHdrIdx + 1; i < rows.length; i++){
+    const r = rows[i];
+    if (!r[0] || !/^\d+$/.test(String(r[0]).trim())) break;
+    tenants.push({
+      name: (r[1]||"").trim(), location: (r[2]||"").trim(), rent: parseNum(r[3]),
+      dueDay: parseInt(r[4],10) || 1, status: statusFromRaw(r[5]),
+      outstanding: parseNum(r[7]), expiry: (r[8]||"").trim(), alert: (r[9]||"").trim()
+    });
+  }
+  const syncDate = (rows[1] && rows[1][0]) ? rows[1][0].trim() : "";
+  return { summary, tenants, syncDate };
+}
+
+function parseTenantsCSV(rows){
+  const hdrIdx = rows.findIndex(r => (r[0]||"").trim() === "#" && (r[1]||"").trim() === "Tenant Name");
+  const map = {};
+  for (let i = hdrIdx + 1; i < rows.length; i++){
+    const r = rows[i];
+    if (!r[1] || !r[1].trim()) continue;
+    map[r[1].trim()] = { deposit: parseNum(r[5]), agrStart: (r[9]||"").trim(), dueIn: (r[8]||"").trim() };
+  }
+  return map;
+}
+
+function normalizeMonthLabel(raw){
+  const s = (raw || "").trim();
+  const found = MONTH_NAMES.find(m => s.toUpperCase().startsWith(m.toUpperCase()));
+  return found || s.slice(0, 3);
+}
+
+// Reads the Monthly Log header row to discover however many month columns exist
+// (Tick, Date pairs starting at column 1), so the sheet can keep growing month
+// over month without any code changes here.
+function parseMonthlyLogCSV(rows){
+  const hdrIdx = rows.findIndex(
+    r => (r[0] || "").trim().toUpperCase() === "TENANT NAME"
+  );
+
+  const headerRow = rows[hdrIdx] || [];
+  const months = [];
+
+  for (let c = 1; c < headerRow.length; c += 2){
+    const rawLabel = (headerRow[c] || "").trim();
+    if (!rawLabel) break;
+
+    const match = rawLabel.match(
+      /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[-\s]?(\d{2,4})/i
+    );
+
+    if (!match) continue;
+
+    const monthName =
+      match[1].charAt(0).toUpperCase() +
+      match[1].slice(1).toLowerCase();
+
+    let year = parseInt(match[2], 10);
+
+    if (year < 100) {
+      year += 2000;
+    }
+
+    const monthIndex = MONTH_NAMES.findIndex(
+      m => m.toLowerCase() === monthName.toLowerCase()
+    );
+
+    months.push({
+      label: `${monthName}-${String(year).slice(-2)}`,
+      year,
+      monthIndex,
+      colIndex: c
+    });
+  }
+
+  const map = {};
+
+  for (let i = hdrIdx + 2; i < rows.length; i++){
+    const r = rows[i];
+
+    if (!r[0] || !r[0].trim()) continue;
+
+    const tenantName = r[0].trim();
+
+    map[tenantName] = months.map(m => ({
+      tick: String(r[m.colIndex] || "").trim().toUpperCase() === "TRUE",
+      date: String(r[m.colIndex + 1] || "").trim()
+    }));
+  }
+
+  return { map, months };
+}
+  
+function shortDate(raw){
+  const d = parseDateFlexible(raw);
+  if (!d) return "";
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${dd} ${MONTH_NAMES[d.getMonth()]}`; // always 3-letter month, e.g. "09 Sep"
+}
+
+// Finds which column in `months` corresponds to the real current calendar month.
+function currentMonthIndex(months, today){
+  const targetMonth = today.getMonth();
+  const targetYear = today.getFullYear();
+
+  let bestIndex = -1;
+
+  for (let i = 0; i < months.length; i++){
+    const m = months[i];
+
+    // Prefer an exact year + month match.
+    if (
+      m.year === targetYear &&
+      m.monthIndex === targetMonth
+    ) {
+      return i;
+    }
+
+    // Keep the latest month that is not in the future.
+    if (
+      m.year < targetYear ||
+      (m.year === targetYear && m.monthIndex <= targetMonth)
+    ) {
+      bestIndex = i;
+    }
+  }
+
+  return bestIndex >= 0 ? bestIndex : 0;
+}
+
+function isSpecialSameMonthPaid(tenantName, today){
+  return SPECIAL_SAME_MONTH_PAID.tenants.includes(tenantName)
+    && today.getFullYear() === SPECIAL_SAME_MONTH_PAID.year
+    && today.getMonth() === SPECIAL_SAME_MONTH_PAID.monthIndex;
+}
+
+function buildHistory(rawTicks, agrStartStr, tenantName, months, curIdx, today){
+  const agrStart = parseDateFlexible(agrStartStr);
+  return months.map((m, idx) => {
+    if (idx === curIdx){
+      const cell = rawTicks && rawTicks[idx];
+      if (cell && cell.tick) return { status: "paid", date: cell.date };
+      if (isSpecialSameMonthPaid(tenantName, today)) return { status: "paid", date: "" };
+      return { status: "current", date: "" };
+    }
+    const offset = curIdx - idx;
+    const monthEnd = new Date(today.getFullYear(), today.getMonth() - offset + 1, 0);
+    if (agrStart && agrStart > monthEnd) return { status: "na", date: "" };
+    const cell = rawTicks && rawTicks[idx];
+    return cell && cell.tick ? { status: "paid", date: cell.date } : { status: "unpaid", date: "" };
+  });
+}
+
+// The Monthly Log sheet is deliberately built to grow for years (Jan-26
+// through Dec-30), but a tenant card should only show a recent, relevant
+// slice — never future months that haven't happened yet. This trims both
+// the month labels and every tenant's history array down to the same
+// trailing window, always ending at the real current month.
+const HISTORY_WINDOW = 8;
+function windowMonths(months, curIdx){
+  const start = Math.max(0, curIdx - (HISTORY_WINDOW - 1));
+  return months.slice(start, curIdx + 1);
+}
+function windowTenants(tenants, curIdx){
+  const start = Math.max(0, curIdx - (HISTORY_WINDOW - 1));
+  return tenants.map(t => ({ ...t, history: t.history.slice(start, curIdx + 1) }));
+}
+
+async function fetchCSV(url){
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return parseCSV(await res.text());
+}
+
+async function loadData(){
+  try {
+    const [dashRows, tenantRows, logRows] = await Promise.all([
+      fetchCSV(CSV.dashboard), fetchCSV(CSV.tenants), fetchCSV(CSV.monthlyLog)
+    ]);
+    const dash = parseDashboardCSV(dashRows);
+    const tenantMeta = parseTenantsCSV(tenantRows);
+    const { map: logMap, months } = parseMonthlyLogCSV(logRows);
+    const today = new Date();
+    const curIdx = currentMonthIndex(months, today);
+
+    const tenants = dash.tenants.map(t => {
+      const meta = tenantMeta[t.name] || { deposit: 0, agrStart: null, dueIn: "Same Month" };
+      return {
+        ...t,
+        deposit: meta.deposit,
+        dueIn: meta.dueIn || "Same Month",
+        expiryLabel: t.expiry,
+        expiry: (parseDateFlexible(t.expiry) || today).toISOString().slice(0,10),
+        history: buildHistory(logMap[t.name], meta.agrStart, t.name, months, curIdx, today)
+      };
+    });
+
+    render({ summary: dash.summary, tenants: windowTenants(tenants, curIdx), months: windowMonths(months, curIdx), curIdx: Math.min(curIdx, HISTORY_WINDOW - 1), live: true, syncDate: dash.syncDate || FALLBACK.syncDate, today });
+  } catch (err) {
+    console.error("Live fetch failed, using fallback:", err);
+    render({ ...FALLBACK, months: MONTHS.map(m => ({ label: m })), curIdx: 7, live: false, today: new Date() });
+  }
+}
+
+async function manualRefresh(){
+  const btn = document.getElementById('refreshBtn');
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = "↻ Refreshing…";
+  try {
+    await loadData();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "↻ Refresh";
+  }
+}
+
+function expiryClass(days){
+  if (days <= 30) return "urgent";
+  if (days <= 60) return "warn";
+  return "";
+}
+function expiryText(days){
+  if (days <= 0) return "EXPIRED";
+  if (days <= 30) return `Expires in ${days}d — renew now`;
+  if (days <= 60) return `Expires in ${days}d — renew soon`;
+  return "OK";
+}
+
+function render(data){
+  document.getElementById('todayLine').textContent = data.today.toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+  document.getElementById('syncLine').textContent = (data.live ? "Live · synced " : "Cached · last known ") + data.syncDate;
+  document.getElementById('syncDot').className = "sync-dot " + (data.live ? "live" : "cached");
+  document.getElementById('sheetLink').href = SHEET_URL;
+
+  const stats = [
+    { label:"Expected", value: inr(data.summary.expected), accent:"" },
+    { label:"Received", value: inr(data.summary.received), accent:"accent-green" },
+    { label:"Pending",  value: inr(data.summary.pending),  accent: data.summary.pending > 0 ? "accent-amber" : "" },
+    { label:"Deposits Held", value: inr(data.summary.depositsHeld), accent:"" }
+  ];
+  document.getElementById('statGrid').innerHTML = stats.map(s => `
+    <div class="stat-card ${s.accent}"><p class="label">${s.label}</p><p class="value">${s.value}</p></div>
+  `).join("");
+
+  const sorted = [...data.tenants].sort((a,b) => {
+    const so = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
+    if (so !== 0) return so;
+    if (a.dueDay !== b.dueDay) return a.dueDay - b.dueDay;
+    return a.name.localeCompare(b.name);
+  });
+
+  // Cache the current render context so single-card updates (after a tick)
+  // can rebuild one card without needing a full re-render or a re-fetch.
+  lastRenderData = data;
+  lastSorted = sorted;
+
+  document.getElementById('tenantList').innerHTML = sorted
+    .map((t, i) => renderTenantCard(t, i, data.months, data.curIdx, data.today))
+    .join("");
+}
+
+// Builds the HTML for a single tenant card. Pulled out of render() so a tick
+// can refresh just one card (via updateTenantCard) without touching the rest
+// of the list or losing other cards' expanded/collapsed state.
+function renderTenantCard(t, i, months, curIdx, today){
+  const days = daysUntil(t.expiry, today);
+  const eClass = expiryClass(days);
+  const wrapClasses = ["tenant-wrap", "status-" + t.status];
+  if (eClass === "warn") wrapClasses.push("expiry-warn");
+  if (eClass === "urgent") wrapClasses.push("expiry-urgent");
+  const flagHtml = eClass ? `<p class="expiry-flag ${eClass}">${eClass === "urgent" ? "⚠" : "◷"} ${expiryText(days)}</p>` : "";
+
+  const historyHtml = months.map((m, mi) => {
+    const h = t.history[mi] || { status: "na", date: "" };
+    let cls = h.status, symbol = m.label.split("-")[0], belowLabel = "";
+    if (h.status === "current") {
+      cls = t.status === "overdue" ? "unpaid"
+          : t.status === "pending" ? "pending"
+          : t.status === "upcoming" ? "upcoming"
+          : "paid";
+    }
+    else if (h.status === "paid") {
+  belowLabel = shortDate(h.date);
+}
+    const highlight = mi === curIdx ? " current-month" : "";
+    return `
+      <div class="history-col">
+        <div class="hcell ${cls}${highlight}" title="${m.label}">${symbol}</div>
+        <div class="hcell-label">${belowLabel}</div>
+      </div>`;
+  }).join("");
+
+  const isSaving = savingSet.has(i);
+  const stampOnclick = (t.status === "paid" || isSaving) ? "" : ` onclick="onStampTap(event, ${i})"`;
+  const stampLabel = isSaving ? "Saving…" : STATUS_LABEL[t.status];
+  const stampClass = isSaving ? "stamp stamp-saving" : `stamp stamp-${t.status}`;
+
+  const whatsappBtn = (t.status === "overdue" && !isSaving)
+    ? `<button class="whatsapp-btn" onclick="copyNudge(event, ${i})" aria-label="Copy WhatsApp reminder">💬 Nudge</button>`
+    : "";
+
+  return `
+  <div class="${wrapClasses.join(' ')}" id="tw-${i}">
+    <div class="tenant-card" onclick="toggleTenant(${i})">
+      <div class="tenant-left">
+        <span class="chevron">▸</span>
+        <div>
+          <p class="tenant-name">${t.name}</p>
+          <p class="tenant-meta">${t.location}<span class="dot">·</span>Due ${t.dueDay}${ordinal(t.dueDay)}</p>
+          ${flagHtml}
+        </div>
+      </div>
+      <div class="tenant-right">
+        <p class="tenant-rent">${inr(t.rent)}</p>
+        <span class="${stampClass}"${stampOnclick}>${stampLabel}</span>
+        ${whatsappBtn}
+      </div>
+    </div>
+    <div class="tenant-detail">
+      <div class="tenant-detail-inner">
+        <div class="detail-grid">
+          <div class="detail-item"><p class="dlabel">Outstanding</p><p class="dvalue">${inr(t.outstanding)}</p></div>
+          <div class="detail-item"><p class="dlabel">Deposit Held</p><p class="dvalue">${inr(t.deposit)}</p></div>
+          <div class="detail-item"><p class="dlabel">Agreement Expiry</p><p class="dvalue">${t.expiryLabel}</p></div>
+          <div class="detail-item"><p class="dlabel">Expiry Status</p><p class="dvalue">${expiryText(days)}</p></div>
+        </div>
+        <p class="history-label">Payment History — ${months[0].label} to ${months[months.length-1].label} · swipe for more</p>
+        <div class="history-scroll"><div class="history-track">${historyHtml}</div></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function toggleTenant(i){
+  document.getElementById('tw-' + i).classList.toggle('open');
+}
+
+// Re-renders a single tenant card in place (used after an optimistic tick,
+// undo, or write failure) — preserves that card's open/closed state and
+// never touches any other card or triggers a CSV re-fetch.
+function updateTenantCard(i){
+  const el = document.getElementById('tw-' + i);
+  const t = lastSorted[i];
+  if (!el || !t || !lastRenderData) return;
+  const wasOpen = el.classList.contains('open');
+  const html = renderTenantCard(t, i, lastRenderData.months, lastRenderData.curIdx, lastRenderData.today);
+  const temp = document.createElement('div');
+  temp.innerHTML = html.trim();
+  const newEl = temp.firstElementChild;
+  if (wasOpen) newEl.classList.add('open');
+  el.replaceWith(newEl);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MARK PAID — tick flow
+//   Tap stamp → optimistic flip, no write yet
+//   5s undo toast → tap Undo cancels, nothing is ever sent to the Sheet
+//   Timer elapses → background write fires (continues even if app is closed
+//     or backgrounded, since it's a plain setTimeout independent of the UI)
+//   Success → card stays Paid, confirmed from the write response
+//   Failure → card reverts, visible error banner stays until dismissed
+// ═══════════════════════════════════════════════════════════════════════
+
+// Type A (arrears / "Next Month"): tenant's payment window this month is
+// actually settling LAST month's rent (e.g. Deepak's Aug rent is paid in the
+// Sep 1-5 window) — so tapping Paid must tick the PREVIOUS month's cell.
+// Type B (advance / "Same Month"): tapping Paid ticks the CURRENT month, as before.
+function monthLabelForWrite(t, today){
+  const isArrears = (t.dueIn || "").trim().toLowerCase() === "next month";
+  const base = isArrears
+    ? new Date(today.getFullYear(), today.getMonth() - 1, 1)
+    : today;
+  return `${MONTH_NAMES[base.getMonth()]}-${String(base.getFullYear()).slice(-2)}`;
+}
+
+function onStampTap(event, i){
+  event.stopPropagation(); // never let this bubble up into toggleTenant()
+  if (pendingWrites[i]) return; // already mid-tick for this tenant, ignore repeat taps
+  const t = lastSorted[i];
+  if (!t || t.status === "paid") return;
+  markPaidFlow(i);
+}
+
+function markPaidFlow(i){
+  const t = lastSorted[i];
+  if (!t || !lastRenderData) return;
+
+  const originalStatus = t.status;
+  const tenantName = t.name;
+  const monthLabel = monthLabelForWrite(t, lastRenderData.today);
+
+  // Optimistic update — flips immediately, no network call yet
+  t.status = "paid";
+  updateTenantCard(i);
+
+  let secondsLeft = UNDO_WINDOW_MS / 1000;
+  const toastEl = showUndoToast(secondsLeft, () => undoMarkPaid(i));
+
+  const intervalId = setInterval(() => {
+    secondsLeft -= 1;
+    updateUndoToastCountdown(toastEl, secondsLeft);
+  }, 1000);
+
+  const timerId = setTimeout(() => {
+    clearInterval(intervalId);
+    doWrite(i, tenantName, monthLabel, originalStatus);
+  }, UNDO_WINDOW_MS);
+
+  pendingWrites[i] = { timerId, intervalId, originalStatus, tenantName, monthLabel };
+}
+
+function undoMarkPaid(i){
+  const pending = pendingWrites[i];
+  if (!pending) return;
+  clearTimeout(pending.timerId);
+  clearInterval(pending.intervalId);
+  delete pendingWrites[i];
+
+  const t = lastSorted[i];
+  if (t) { t.status = pending.originalStatus; updateTenantCard(i); }
+  hideUndoToast();
+}
+
+async function doWrite(i, tenantName, monthLabel, originalStatus){
+  hideUndoToast(); // undo window is over; write is now in flight in the background
+  savingSet.add(i);
+  updateTenantCard(i);
+  try {
+    const res = await fetch(WRITE_URL, {
+      method: "POST",
+      // text/plain avoids a CORS preflight OPTIONS request, which Apps Script
+      // web apps don't handle — this keeps it a "simple request".
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify({ action: "markPaid", tenant: tenantName, monthLabel })
+    });
+    const result = await res.json();
+    delete pendingWrites[i];
+    savingSet.delete(i);
+    if (!result.success) throw new Error(result.error || "Write failed");
+    updateTenantCard(i); // clears the Saving… label, shows the confirmed Paid stamp
+    // Deliberately NOT re-fetching the CSVs here (published CSV links lag
+    // behind live edits) — the card's state above is authoritative until the
+    // next scheduled 5-minute refresh, per project handoff notes.
+  } catch (err) {
+    delete pendingWrites[i];
+    savingSet.delete(i);
+    const t = lastSorted[i];
+    if (t) { t.status = originalStatus; updateTenantCard(i); }
+    showErrorBanner(`Couldn't save ${tenantName}'s payment — check your connection and try again.`);
+  }
+}
+
+// ── Undo toast UI ──
+function showUndoToast(secondsLeft, onUndo){
+  hideUndoToast();
+  const el = document.createElement("div");
+  el.className = "undo-toast";
+  el.id = "undoToast";
+  el.innerHTML = `<span id="undoToastText">Marked Paid · undo (${secondsLeft}s)</span><button class="undo-btn">Undo</button>`;
+  el.querySelector(".undo-btn").onclick = (e) => { e.stopPropagation(); onUndo(); };
+  document.body.appendChild(el);
+  (window.requestAnimationFrame || function(cb){ setTimeout(cb, 0); })(() => el.classList.add("show"));
+  return el;
+}
+function updateUndoToastCountdown(el, secondsLeft){
+  const textEl = el && document.getElementById("undoToastText");
+  if (textEl) textEl.textContent = `Marked Paid · undo (${Math.max(secondsLeft, 0)}s)`;
+}
+function hideUndoToast(){
+  const el = document.getElementById("undoToast");
+  if (el) el.remove();
+}
+
+// ── Error banner UI ──
+function showErrorBanner(message){
+  let el = document.getElementById("errorBanner");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "errorBanner";
+    el.className = "error-banner";
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `<span>${message}</span><button class="dismiss-btn" aria-label="Dismiss">✕</button>`;
+  el.querySelector(".dismiss-btn").onclick = () => el.remove();
+}
+
+// ── WhatsApp nudge — copies a polite reminder to the clipboard ──
+function copyNudge(event, i){
+  event.stopPropagation();
+  const t = lastSorted[i];
+  if (!t) return;
+  const message = `Hi ${t.name}, this is a gentle reminder that your rent of ${inr(t.outstanding || t.rent)} for ${t.location} is currently overdue. Kindly arrange the payment at your earliest convenience. Thank you!`;
+  const btn = event.currentTarget;
+  const original = btn.textContent;
+  const restore = () => { btn.textContent = original; };
+  const showCopied = () => { btn.textContent = "✓ Copied"; setTimeout(restore, 1500); };
+  const showFailed = () => { btn.textContent = "Copy failed"; setTimeout(restore, 1500); };
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(message).then(showCopied, showFailed);
+  } else {
+    const ta = document.createElement("textarea");
+    ta.value = message;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); showCopied(); } catch (e) { showFailed(); }
+    document.body.removeChild(ta);
+  }
+}
+
+loadData();
+setInterval(loadData, 5 * 60 * 1000); // auto-refresh live data every 5 minutes
+</script>
+</body>
+</html>

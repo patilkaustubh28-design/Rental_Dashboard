@@ -388,7 +388,8 @@ function parseMonthlyLogCSV(rows){
 function shortDate(raw){
   const d = parseDateFlexible(raw);
   if (!d) return "";
-  return d.toLocaleDateString("en-IN", { day:"2-digit", month:"short" }); // e.g. "07 Sep"
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${dd} ${MONTH_NAMES[d.getMonth()]}`; // always 3-letter month, e.g. "09 Sep"
 }
 
 // Finds which column in `months` corresponds to the real current calendar month.
